@@ -17,7 +17,23 @@ interface GeoData {
   mineralogia: string;
   observaciones: string;
   id_muestra: string;
+  fotos?: string[]; // base64 compressed photos
+  _transcripcion?: string;
 }
+
+// ── Geological dropdowns (industry standard) ──
+const ALTERACION_OPTIONS = [
+  "No especificado", "Argílica", "Argílica avanzada", "Propilítica",
+  "Sericítica", "Fílica", "Potásica", "Silicificación",
+  "Cloritización", "Epidotización", "Oxidación", "Supérgena", "Otra",
+];
+
+const MINERALOGIA_COMMON = [
+  "Cuarzo", "Feldespato", "Plagioclasa", "Biotita", "Muscovita",
+  "Pirita", "Calcopirita", "Molibdenita", "Magnetita", "Hematita",
+  "Malaquita", "Crisocola", "Calcita", "Clorita", "Epidota",
+  "Sericita", "Arcilla", "Limonita", "Goethita", "Turmalina",
+];
 
 // Fields the user needs to describe in their audio
 const PROMPT_FIELDS = [
@@ -29,7 +45,7 @@ const PROMPT_FIELDS = [
   { key: "id_muestra", icon: "🏷️", label: "ID Muestra", hint: "Código de la muestra" },
 ];
 
-const FIELD_LABELS: Record<keyof GeoData, string> = {
+const FIELD_LABELS: Record<string, string> = {
   fecha: "Fecha",
   numero_de_punto: "N° Punto",
   caja: "Caja",
@@ -49,10 +65,13 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
   const [error, setError] = useState<string | null>(null);
   const [currentPromptIdx, setCurrentPromptIdx] = useState(0);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [selectedMinerals, setSelectedMinerals] = useState<string[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const promptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-generated values
   const now = new Date();
@@ -85,6 +104,45 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
   const formatTime = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
+  // ── Photo capture ──
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        // Compress: resize to max 800px and convert to JPEG
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxSize = 800;
+          let { width, height } = img;
+          if (width > maxSize || height > maxSize) {
+            const ratio = Math.min(maxSize / width, maxSize / height);
+            width *= ratio;
+            height *= ratio;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d")!;
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.7);
+          setPhotos((prev) => [...prev, compressed]);
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+    // Reset input for re-capture
+    e.target.value = "";
+  };
+
+  const removePhoto = (idx: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // ── Audio recording ──
   const startRecording = async () => {
     try {
       setError(null);
@@ -137,17 +195,26 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.error || "Error en el servidor");
+        throw new Error(err.error || "Error conectando con Gemini. ¿Está configurada la API key?");
       }
 
       const result = await response.json();
       if (result.error) throw new Error(result.error);
 
-      // Auto-fill date and point number
+      // Pre-select minerals from AI response
+      if (result.mineralogia && result.mineralogia !== "No especificado") {
+        const detected = result.mineralogia.split(",").map((m: string) => m.trim());
+        setSelectedMinerals(detected.filter((m: string) =>
+          MINERALOGIA_COMMON.some((mc) => mc.toLowerCase() === m.toLowerCase())
+        ));
+      }
+
+      // Auto-fill date, point number, and photos
       setGeoData({
         ...result,
         fecha: result.fecha || autoFecha,
         numero_de_punto: result.numero_de_punto || point.id,
+        fotos: photos.length > 0 ? photos : undefined,
       });
       setStep("review");
     } catch (err: any) {
@@ -156,15 +223,46 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
     }
   };
 
-  const handleFieldChange = (key: keyof GeoData, value: string) => {
+  const handleFieldChange = (key: string, value: string) => {
     if (!geoData) return;
     setGeoData({ ...geoData, [key]: value });
   };
+
+  const toggleMineral = (mineral: string) => {
+    setSelectedMinerals((prev) =>
+      prev.includes(mineral) ? prev.filter((m) => m !== mineral) : [...prev, mineral]
+    );
+  };
+
+  // Sync minerals to geoData
+  useEffect(() => {
+    if (geoData && step === "review") {
+      const mineralStr = selectedMinerals.length > 0 ? selectedMinerals.join(", ") : "No especificado";
+      if (mineralStr !== geoData.mineralogia) {
+        setGeoData({ ...geoData, mineralogia: mineralStr });
+      }
+    }
+  }, [selectedMinerals]);
+
+  // Hidden file input for camera
+  const hiddenPhotoInput = (
+    <input
+      ref={photoInputRef}
+      type="file"
+      accept="image/*"
+      capture="environment"
+      multiple
+      className="hidden"
+      onChange={handlePhotoCapture}
+    />
+  );
 
   // ── STEP 1: Record ──
   if (step === "record") {
     return (
       <div className="flex flex-col gap-3">
+        {hiddenPhotoInput}
+
         {/* Header */}
         <div className="flex justify-between items-center">
           <h3 className="font-semibold text-base">🎙️ Registro Geológico</h3>
@@ -172,7 +270,7 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
         </div>
 
         {/* Auto-captured info */}
-        <div className="flex gap-2 text-xs">
+        <div className="flex gap-2 text-xs flex-wrap">
           <span className="px-2 py-1 rounded-md bg-blue-900/50 border border-blue-700 text-blue-300">
             📅 {autoFecha}
           </span>
@@ -198,7 +296,6 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
               </span>
             </div>
 
-            {/* Active prompt card */}
             <div className="flex items-center gap-3 animate-fade-in" key={currentPromptIdx}>
               <span className="text-3xl">{PROMPT_FIELDS[currentPromptIdx].icon}</span>
               <div>
@@ -207,7 +304,6 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
               </div>
             </div>
 
-            {/* Progress dots */}
             <div className="flex justify-center gap-1.5 mt-3">
               {PROMPT_FIELDS.map((_, i) => (
                 <div
@@ -239,6 +335,29 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
             </div>
           </div>
         )}
+
+        {/* ── Photos section ── */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => photoInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-800/60 border border-emerald-600 text-emerald-300 text-sm hover:bg-emerald-700 transition-all"
+          >
+            📸 {photos.length > 0 ? `${photos.length} foto${photos.length > 1 ? "s" : ""}` : "Tomar foto"}
+          </button>
+          {photos.length > 0 && (
+            <div className="flex gap-1.5 overflow-x-auto">
+              {photos.map((photo, i) => (
+                <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-600 flex-shrink-0">
+                  <img src={photo} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => removePhoto(i)}
+                    className="absolute top-0 right-0 w-4 h-4 bg-red-600 text-white text-[10px] flex items-center justify-center rounded-bl-md"
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Recording controls */}
         {!audioBlob ? (
@@ -301,9 +420,9 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
     );
   }
 
-  // ── STEP 3: Review & Edit ──
+  // ── STEP 3: Review & Edit with dropdowns ──
   return (
-    <div className="flex flex-col gap-3 max-h-[70vh] overflow-y-auto">
+    <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
       <div className="flex justify-between items-center">
         <h3 className="font-semibold text-base">✅ Datos Extraídos — {point.id}</h3>
         <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
@@ -311,31 +430,118 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
 
       {geoData && (
         <div className="flex flex-col gap-2">
-          {(Object.keys(FIELD_LABELS) as (keyof GeoData)[]).map((key) => (
-            <div key={key} className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-                {FIELD_LABELS[key]}
-              </label>
-              <input
-                type="text"
-                value={geoData[key]}
-                onChange={(e) => handleFieldChange(key, e.target.value)}
-                className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
-              />
+          {/* Fecha & Punto (readonly) */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-0.5">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Fecha</label>
+              <input type="text" value={geoData.fecha} readOnly className="w-full bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-400" />
             </div>
-          ))}
+            <div className="flex flex-col gap-0.5">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">N° Punto</label>
+              <input type="text" value={geoData.numero_de_punto} readOnly className="w-full bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-400" />
+            </div>
+          </div>
+
+          {/* Caja & Nivel */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-0.5">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Caja</label>
+              <input type="text" value={geoData.caja} onChange={(e) => handleFieldChange("caja", e.target.value)}
+                className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none" />
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Nivel</label>
+              <input type="text" value={geoData.nivel} onChange={(e) => handleFieldChange("nivel", e.target.value)}
+                className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none" />
+            </div>
+          </div>
+
+          {/* Alteración - DROPDOWN */}
+          <div className="flex flex-col gap-0.5">
+            <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">🔥 Alteración</label>
+            <select
+              value={ALTERACION_OPTIONS.includes(geoData.alteracion) ? geoData.alteracion : "Otra"}
+              onChange={(e) => handleFieldChange("alteracion", e.target.value)}
+              className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none appearance-none"
+            >
+              {ALTERACION_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+            {!ALTERACION_OPTIONS.includes(geoData.alteracion) && geoData.alteracion !== "No especificado" && (
+              <input type="text" value={geoData.alteracion} onChange={(e) => handleFieldChange("alteracion", e.target.value)}
+                placeholder="Especificar otra alteración..."
+                className="w-full mt-1 bg-gray-800/80 border border-amber-600/50 rounded-lg px-3 py-1.5 text-sm text-amber-300 focus:border-amber-500 focus:outline-none" />
+            )}
+          </div>
+
+          {/* Mineralogía - CHIP SELECT */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">💎 Mineralogía</label>
+            <div className="flex flex-wrap gap-1.5 p-2 rounded-lg bg-gray-800/50 border border-gray-700 max-h-24 overflow-y-auto">
+              {MINERALOGIA_COMMON.map((mineral) => {
+                const isSelected = selectedMinerals.some((m) => m.toLowerCase() === mineral.toLowerCase());
+                return (
+                  <button
+                    key={mineral}
+                    onClick={() => toggleMineral(mineral)}
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium transition-all ${
+                      isSelected
+                        ? "bg-emerald-600 text-white border border-emerald-400"
+                        : "bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-400"
+                    }`}
+                  >
+                    {mineral}
+                  </button>
+                );
+              })}
+            </div>
+            <input type="text" value={geoData.mineralogia} onChange={(e) => handleFieldChange("mineralogia", e.target.value)}
+              placeholder="Agregar minerales adicionales..."
+              className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-gray-300 focus:border-blue-500 focus:outline-none" />
+          </div>
+
+          {/* ID Muestra */}
+          <div className="flex flex-col gap-0.5">
+            <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">ID Muestra</label>
+            <input type="text" value={geoData.id_muestra} onChange={(e) => handleFieldChange("id_muestra", e.target.value)}
+              className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none" />
+          </div>
+
+          {/* Observaciones */}
+          <div className="flex flex-col gap-0.5">
+            <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Observaciones</label>
+            <textarea
+              value={geoData.observaciones}
+              onChange={(e) => handleFieldChange("observaciones", e.target.value)}
+              rows={2}
+              className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none resize-none"
+            />
+          </div>
+
+          {/* Photos preview in review */}
+          {photos.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">📸 Fotos ({photos.length})</label>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {photos.map((photo, i) => (
+                  <img key={i} src={photo} alt={`Foto ${i + 1}`} className="w-16 h-16 rounded-lg object-cover border border-gray-600 flex-shrink-0" />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="flex gap-2 mt-2 sticky bottom-0 bg-gray-900/90 py-2">
+      <div className="flex gap-2 mt-1 sticky bottom-0 bg-gray-900/90 py-2">
         <button
-          onClick={() => { setStep("record"); setAudioBlob(null); setAudioUrl(null); setGeoData(null); setRecordingSeconds(0); }}
+          onClick={() => { setStep("record"); setAudioBlob(null); setAudioUrl(null); setGeoData(null); setRecordingSeconds(0); setPhotos([]); setSelectedMinerals([]); }}
           className="flex-1 py-2 px-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm"
         >
           Descartar
         </button>
         <button
-          onClick={() => geoData && onSave(geoData)}
+          onClick={() => geoData && onSave({ ...geoData, fotos: photos.length > 0 ? photos : undefined })}
           className="flex-1 py-2 px-3 rounded-lg bg-green-600 hover:bg-green-700 text-sm font-medium"
         >
           ✓ Guardar Punto

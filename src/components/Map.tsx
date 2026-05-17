@@ -26,6 +26,7 @@ export default function Map() {
   const [mapReady, setMapReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gpsPosition, setGpsPosition] = useState<[number, number] | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const markersRef = useRef<any[]>([]);
 
   // ── Point configuration ──
@@ -190,6 +191,7 @@ export default function Map() {
             (pos) => {
               const latlng: [number, number] = [pos.coords.latitude, pos.coords.longitude];
               setGpsPosition(latlng);
+              setGpsAccuracy(pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null);
               map.setView(latlng, 14);
               const gpsIcon = L.divIcon({
                 html: `<div style="width:20px;height:20px;background:#3b82f6;border:3px solid white;border-radius:50%;box-shadow:0 0 12px rgba(59,130,246,0.7);animation:pulse 2s infinite;"></div>`,
@@ -199,6 +201,16 @@ export default function Map() {
             },
             () => { setGpsPosition(null); },
             { timeout: 8000, enableHighAccuracy: true }
+          );
+
+          // Continuous GPS watch for accuracy updates
+          navigator.geolocation.watchPosition(
+            (pos) => {
+              setGpsPosition([pos.coords.latitude, pos.coords.longitude]);
+              setGpsAccuracy(pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null);
+            },
+            () => {},
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
           );
         }
 
@@ -276,11 +288,26 @@ export default function Map() {
     (data: any) => {
       if (!activePoint) return;
       setPoints((prev) => prev.map((p) => p.id === activePoint.id ? { ...p, data } : p));
+
+      // Update marker to green (saved)
+      if (mapRef.current && typeof L !== "undefined") {
+        const idx = points.findIndex((p) => p.id === activePoint.id);
+        if (idx >= 0 && markersRef.current[idx]) {
+          const m = markersRef.current[idx];
+          const greenIcon = L.divIcon({
+            html: `<div style="width:28px;height:28px;background:#22c55e;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:bold;">${idx + 1}</div>`,
+            iconSize: [28, 28], iconAnchor: [14, 14], className: "",
+          });
+          m.setIcon(greenIcon);
+          m.bindPopup(`<b>${activePoint.id}</b><br>${data.alteracion || ""}<br>${data.mineralogia || ""}`);
+        }
+      }
+
       setActivePoint(null);
       // Persist config (next number has already incremented)
       saveConfig();
     },
-    [activePoint, pointPrefix]
+    [activePoint, pointPrefix, points]
   );
 
   // Export to CSV
@@ -433,21 +460,40 @@ export default function Map() {
         </div>
       )}
 
-      {/* ── Top bar: Config + Counter + Export ── */}
+      {/* ── Top bar: GPS Accuracy + Config + Counter + Export ── */}
       {mapReady && !activePoint && (
         <div className="absolute top-4 left-4 right-4 z-[1000] flex justify-between items-center">
-          {/* Point counter — clickable to open manager */}
-          <button
-            onClick={() => setShowPointsManager(true)}
-            className="px-3 py-2 rounded-xl bg-gray-900/80 backdrop-blur-md border border-gray-600 text-white text-sm flex items-center gap-2 hover:bg-gray-800 transition-all"
-          >
-            <span>📍 {points.filter(p => p.data).length}/{points.length} puntos</span>
-            <span className="text-gray-400">|</span>
-            <span className="text-blue-300 font-mono text-xs">
-              Sig: {pointPrefix}-{String(nextNumberRef.current).padStart(3, "0")}
-            </span>
-            <span className="text-gray-500 text-xs">▶</span>
-          </button>
+          {/* GPS accuracy badge */}
+          <div className="flex items-center gap-2">
+            {gpsAccuracy !== null && (
+              <div className={`px-2.5 py-1.5 rounded-xl backdrop-blur-md border text-xs font-mono flex items-center gap-1.5 ${
+                gpsAccuracy <= 5 ? "bg-green-900/80 border-green-600 text-green-300" :
+                gpsAccuracy <= 15 ? "bg-blue-900/80 border-blue-600 text-blue-300" :
+                gpsAccuracy <= 30 ? "bg-amber-900/80 border-amber-600 text-amber-300" :
+                "bg-red-900/80 border-red-600 text-red-300"
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  gpsAccuracy <= 5 ? "bg-green-400" :
+                  gpsAccuracy <= 15 ? "bg-blue-400" :
+                  gpsAccuracy <= 30 ? "bg-amber-400 animate-pulse" :
+                  "bg-red-400 animate-pulse"
+                }`} />
+                📡 ±{gpsAccuracy}m
+              </div>
+            )}
+
+            {/* Point counter — clickable to open manager */}
+            <button
+              onClick={() => setShowPointsManager(true)}
+              className="px-3 py-1.5 rounded-xl bg-gray-900/80 backdrop-blur-md border border-gray-600 text-white text-xs flex items-center gap-2 hover:bg-gray-800 transition-all"
+            >
+              <span>📍 {points.filter(p => p.data).length}/{points.length}</span>
+              <span className="text-gray-400">|</span>
+              <span className="text-blue-300 font-mono">
+                {pointPrefix}-{String(nextNumberRef.current).padStart(3, "0")}
+              </span>
+            </button>
+          </div>
 
           {/* Action buttons */}
           <div className="flex gap-2">
