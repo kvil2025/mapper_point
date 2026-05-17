@@ -256,7 +256,7 @@ export default function Map() {
           { layers: "0", format: "image/png", transparent: true, opacity: 0.5, attribution: "&copy; SERNAGEOMIN" }
         ).addTo(map);
 
-        L.control.zoom({ position: "topright" }).addTo(map);
+        L.control.zoom({ position: "bottomleft" }).addTo(map);
 
         if ("geolocation" in navigator) {
           navigator.geolocation.getCurrentPosition(
@@ -858,73 +858,70 @@ export default function Map() {
         </div>
       )}
 
-      {/* ── Floating Action Buttons (mobile-safe) ── */}
+      {/* ── FAB Stack (right side, above Safari bar) ── */}
       {mapReady && !activePoint && !showConfig && (
-        <div className="fixed bottom-0 left-0 right-0 z-[2000] px-4 flex flex-col gap-2 items-center bg-gradient-to-t from-gray-900/80 via-gray-900/40 to-transparent pt-8" style={{ paddingBottom: 'max(100px, calc(28px + env(safe-area-inset-bottom, 44px)))' }}>
-          {/* Track recording bar */}
+        <div className="fixed right-4 z-[2000] flex flex-col items-center gap-2" style={{ bottom: 'max(100px, calc(28px + env(safe-area-inset-bottom, 44px)))' }}>
+          {/* Track recording bar — centered */}
           {isTracking && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-900/90 backdrop-blur-md border border-amber-600 text-amber-200 text-xs">
-              <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-              <span className="font-mono">{formatElapsed(trackElapsed)}</span>
-              <span className="text-amber-400">|</span>
-              <span>{calcTrackDistance()}</span>
-              <span className="text-amber-400">|</span>
-              <span>{trackPoints.length} pts</span>
-              <button onClick={stopTracking} className="ml-2 px-3 py-1 bg-red-600 hover:bg-red-700 rounded-full text-white text-xs font-medium">⏹ Detener</button>
+            <div className="fixed left-4 right-4 z-[2000] flex justify-center" style={{ bottom: 'max(170px, calc(100px + env(safe-area-inset-bottom, 44px)))' }}>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-900/90 backdrop-blur-md border border-amber-600 text-amber-200 text-xs">
+                <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                <span className="font-mono">{formatElapsed(trackElapsed)}</span>
+                <span className="text-amber-400">|</span>
+                <span>{calcTrackDistance()}</span>
+                <span className="text-amber-400">|</span>
+                <span>{trackPoints.length} pts</span>
+                <button onClick={stopTracking} className="ml-2 px-3 py-1 bg-red-600 hover:bg-red-700 rounded-full text-white text-xs font-medium">⏹ Detener</button>
+              </div>
             </div>
           )}
 
           {/* Track export panel */}
           {showTrackExport && trackPoints.length > 0 && (
-            <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl bg-gray-900/90 backdrop-blur-md border border-gray-600 text-white text-sm">
+            <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl bg-gray-900/90 backdrop-blur-md border border-gray-600 text-white text-sm mb-2">
               <div className="flex items-center justify-between">
-                <span className="font-medium">📍 Track: {calcTrackDistance()} — {trackPoints.length} puntos</span>
+                <span className="font-medium">📍 {calcTrackDistance()} — {trackPoints.length} pts</span>
                 <button onClick={() => setShowTrackExport(false)} className="text-gray-400 hover:text-white">&times;</button>
               </div>
               <div className="flex gap-2">
-                <button onClick={exportGPX} className="flex-1 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-xs font-medium">📥 GPX</button>
-                <button onClick={exportKML} className="flex-1 py-2 rounded-lg bg-sky-700 hover:bg-sky-600 text-xs font-medium">🌍 KML</button>
-                <button onClick={exportGeoJSON} className="flex-1 py-2 rounded-lg bg-violet-700 hover:bg-violet-600 text-xs font-medium">📐 GeoJSON</button>
+                <button onClick={exportGPX} className="flex-1 py-2 rounded-lg bg-emerald-700 text-xs font-medium">GPX</button>
+                <button onClick={exportKML} className="flex-1 py-2 rounded-lg bg-sky-700 text-xs font-medium">KML</button>
+                <button onClick={exportGeoJSON} className="flex-1 py-2 rounded-lg bg-violet-700 text-xs font-medium">GeoJSON</button>
               </div>
             </div>
           )}
 
-          {/* Main action row */}
-          <div className="flex flex-row gap-2 items-center flex-wrap justify-center">
-            {!pendingPoint ? (
-              <button
-                onClick={handleRecordAtGPS}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm shadow-lg shadow-blue-600/30 transition-all active:scale-95"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
-                </svg>
-                📍 Punto
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-gray-900/90 backdrop-blur-md border border-blue-500 shadow-lg">
-                <span className="text-sm text-white font-medium">¿Agregar punto aquí?</span>
-                <button onClick={confirmPendingPoint} className="px-3 py-1.5 rounded-full bg-green-600 hover:bg-green-700 text-white text-xs font-bold active:scale-95 transition-all">✓ Sí</button>
-                <button onClick={cancelPendingPoint} className="px-3 py-1.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold active:scale-95 transition-all">✕ No</button>
-              </div>
-            )}
+          {/* Pending point confirmation */}
+          {pendingPoint && (
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-gray-900/90 backdrop-blur-md border border-blue-500 shadow-lg mb-2">
+              <span className="text-sm text-white font-medium">¿Agregar punto?</span>
+              <button onClick={confirmPendingPoint} className="px-3 py-1.5 rounded-full bg-green-600 text-white text-xs font-bold active:scale-95">✓ Sí</button>
+              <button onClick={cancelPendingPoint} className="px-3 py-1.5 rounded-full bg-red-600 text-white text-xs font-bold active:scale-95">✕ No</button>
+            </div>
+          )}
 
+          {/* Secondary buttons row */}
+          <div className="flex flex-col gap-2 items-center">
             {!isTracking && !showTrackExport && (
               <button
                 onClick={startTracking}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm shadow-lg shadow-amber-600/30 transition-all active:scale-95"
+                className="w-12 h-12 rounded-full bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-600/30 flex items-center justify-center text-lg active:scale-95 transition-all"
+                title="Iniciar ruta"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                  <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
-                </svg>
-                🚶 Ruta
+                🚶
               </button>
             )}
 
-            <div className="flex items-center px-3 py-2.5 rounded-full bg-gray-900/80 backdrop-blur-md border border-gray-600 text-gray-300 text-xs">
-              <svg className="w-4 h-4 mr-2 text-red-400" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
-              Doble toque = punto
-            </div>
+            {/* Main FAB — Punto */}
+            {!pendingPoint && (
+              <button
+                onClick={handleRecordAtGPS}
+                className="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-600/40 flex items-center justify-center text-2xl active:scale-90 transition-all border-2 border-blue-400/30"
+                title="Agregar punto GPS"
+              >
+                📍
+              </button>
+            )}
           </div>
         </div>
       )}
