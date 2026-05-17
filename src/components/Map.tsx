@@ -167,6 +167,7 @@ export default function Map() {
           center: DEFAULT_POSITION,
           zoom: 13,
           zoomControl: false,
+          doubleClickZoom: false,
         });
 
         L.tileLayer(
@@ -198,7 +199,8 @@ export default function Map() {
           );
         }
 
-        map.on("click", (e: any) => {
+        // Double-click on map -> create point (prevents accidental marks while panning)
+        map.on("dblclick", (e: any) => {
           window.dispatchEvent(new CustomEvent("geologgia-map-click", { detail: { lat: e.latlng.lat, lng: e.latlng.lng } }));
         });
 
@@ -568,7 +570,7 @@ export default function Map() {
 
             <div className="flex items-center px-3 py-2.5 rounded-full bg-gray-900/80 backdrop-blur-md border border-gray-600 text-gray-300 text-xs">
               <svg className="w-4 h-4 mr-2 text-red-400" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
-              Toca mapa
+              Doble toque = punto
             </div>
           </div>
         </div>
