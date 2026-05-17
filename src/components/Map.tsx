@@ -164,11 +164,18 @@ export default function Map() {
     }));
   };
 
-  // Generate next point ID
+  // Generate next point ID (collision-safe)
   const getNextPointId = () => {
-    const num = nextNumberRef.current;
+    let num = nextNumberRef.current;
+    let id = `${pointPrefix}-${String(num).padStart(3, "0")}`;
+    // Skip existing IDs to prevent duplicates after reload
+    const existingIds = new Set(points.map(p => p.id));
+    while (existingIds.has(id)) {
+      num++;
+      id = `${pointPrefix}-${String(num).padStart(3, "0")}`;
+    }
     nextNumberRef.current = num + 1;
-    return `${pointPrefix}-${String(num).padStart(3, "0")}`;
+    return id;
   };
 
   // Create a geological point and open the recorder
@@ -325,11 +332,12 @@ export default function Map() {
   useEffect(() => {
     const handler = (e: any) => {
       const { lat, lng } = e.detail;
-      createGeoPoint(lat, lng);
+      // Double-tap also goes through confirmation
+      setPendingPoint([lat, lng]);
     };
     window.addEventListener("geologgia-map-click", handler);
     return () => window.removeEventListener("geologgia-map-click", handler);
-  }, [createGeoPoint]);
+  }, []);
 
   const handleRecordAtGPS = () => {
     if (!gpsPosition) {
