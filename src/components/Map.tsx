@@ -401,6 +401,10 @@ export default function Map() {
           70% { box-shadow: 0 0 0 15px rgba(59,130,246,0); }
           100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
         }
+        /* Safe area for iPhone notch/home indicator */
+        .safe-bottom {
+          padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+        }
       `}</style>
 
       {/* Loading / Error overlay */}
@@ -507,12 +511,12 @@ export default function Map() {
         </div>
       )}
 
-      {/* ── Floating Action Buttons ── */}
+      {/* ── Floating Action Buttons (mobile-safe) ── */}
       {mapReady && !activePoint && !showConfig && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex flex-col gap-3 items-center">
+        <div className="absolute bottom-0 left-0 right-0 z-[1000] safe-bottom pb-4 px-4 flex flex-col gap-2 items-center">
           {/* Track recording bar */}
           {isTracking && (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-full bg-amber-900/90 backdrop-blur-md border border-amber-600 text-amber-200 text-sm">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-900/90 backdrop-blur-md border border-amber-600 text-amber-200 text-xs">
               <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
               <span className="font-mono">{formatElapsed(trackElapsed)}</span>
               <span className="text-amber-400">|</span>
@@ -539,10 +543,10 @@ export default function Map() {
           )}
 
           {/* Main action row */}
-          <div className="flex flex-row gap-3 items-center">
+          <div className="flex flex-row gap-2 items-center flex-wrap justify-center">
             <button
               onClick={handleRecordAtGPS}
-              className="flex items-center gap-2 px-5 py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm shadow-lg shadow-blue-600/30 transition-all active:scale-95"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
@@ -553,7 +557,7 @@ export default function Map() {
             {!isTracking && !showTrackExport && (
               <button
                 onClick={startTracking}
-                className="flex items-center gap-2 px-5 py-3 rounded-full bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm shadow-lg shadow-amber-600/30 transition-all active:scale-95"
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm shadow-lg shadow-amber-600/30 transition-all active:scale-95"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
                   <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
@@ -562,7 +566,7 @@ export default function Map() {
               </button>
             )}
 
-            <div className="flex items-center px-4 py-3 rounded-full bg-gray-900/80 backdrop-blur-md border border-gray-600 text-gray-300 text-sm">
+            <div className="flex items-center px-3 py-2.5 rounded-full bg-gray-900/80 backdrop-blur-md border border-gray-600 text-gray-300 text-xs">
               <svg className="w-4 h-4 mr-2 text-red-400" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
               Toca mapa
             </div>
@@ -570,9 +574,9 @@ export default function Map() {
         </div>
       )}
 
-      {/* ── Floating panel for audio recording ── */}
+      {/* ── Floating panel for audio recording (mobile-safe) ── */}
       {activePoint && (
-        <div className="absolute bottom-4 left-4 right-4 md:left-auto md:w-96 md:right-4 z-[1000] bg-gray-900/90 backdrop-blur-xl border border-gray-600 p-5 rounded-2xl shadow-2xl text-white">
+        <div className="absolute bottom-0 left-0 right-0 md:left-auto md:w-96 md:right-4 md:bottom-4 z-[1000] bg-gray-900/95 backdrop-blur-xl border-t md:border border-gray-600 p-4 md:p-5 md:rounded-2xl shadow-2xl text-white safe-bottom">
           <PointRecorder
             point={activePoint}
             onClose={() => setActivePoint(null)}

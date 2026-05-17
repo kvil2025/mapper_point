@@ -62,7 +62,18 @@ REGLAS:
       },
     });
 
-    const text = response.text();
+    // Handle different SDK versions: .text can be property or function
+    let text: string;
+    if (typeof response.text === "function") {
+      text = response.text();
+    } else if (typeof response.text === "string") {
+      text = response.text;
+    } else if (response.candidates?.[0]?.content?.parts?.[0]?.text) {
+      text = response.candidates[0].content.parts[0].text;
+    } else {
+      text = JSON.stringify(response);
+    }
+
     let structuredData;
     try {
       structuredData = JSON.parse(text);
