@@ -860,7 +860,7 @@ export default function Map() {
 
       {/* ── Floating Action Buttons (mobile-safe) ── */}
       {mapReady && !activePoint && !showConfig && (
-        <div className="absolute bottom-0 left-0 right-0 z-[1000] px-4 flex flex-col gap-2 items-center" style={{ paddingBottom: 'max(90px, calc(24px + env(safe-area-inset-bottom, 40px)))' }}>
+        <div className="fixed bottom-0 left-0 right-0 z-[2000] px-4 flex flex-col gap-2 items-center bg-gradient-to-t from-gray-900/80 via-gray-900/40 to-transparent pt-8" style={{ paddingBottom: 'max(100px, calc(28px + env(safe-area-inset-bottom, 44px)))' }}>
           {/* Track recording bar */}
           {isTracking && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-900/90 backdrop-blur-md border border-amber-600 text-amber-200 text-xs">
