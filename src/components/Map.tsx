@@ -840,7 +840,7 @@ export default function Map() {
 
       {/* ── Floating Action Buttons (mobile-safe) ── */}
       {mapReady && !activePoint && !showConfig && (
-        <div className="absolute bottom-0 left-0 right-0 z-[1000] safe-bottom pb-4 px-4 flex flex-col gap-2 items-center">
+        <div className="absolute bottom-0 left-0 right-0 z-[1000] px-4 flex flex-col gap-2 items-center" style={{ paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 20px))' }}>
           {/* Track recording bar */}
           {isTracking && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-900/90 backdrop-blur-md border border-amber-600 text-amber-200 text-xs">
@@ -903,7 +903,7 @@ export default function Map() {
 
       {/* ── Floating panel for audio recording (mobile-safe) ── */}
       {activePoint && (
-        <div className="absolute bottom-0 left-0 right-0 md:left-auto md:w-96 md:right-4 md:bottom-4 z-[1000] bg-gray-900/95 backdrop-blur-xl border-t md:border border-gray-600 p-4 md:p-5 md:rounded-2xl shadow-2xl text-white safe-bottom">
+        <div className="absolute bottom-0 left-0 right-0 md:left-auto md:w-96 md:right-4 md:bottom-4 z-[1000] bg-gray-900/95 backdrop-blur-xl border-t md:border border-gray-600 p-4 md:p-5 md:rounded-2xl shadow-2xl text-white" style={{ paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 20px))' }}>
           <PointRecorder
             point={activePoint}
             onClose={() => setActivePoint(null)}
