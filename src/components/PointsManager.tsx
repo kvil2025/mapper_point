@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface GeoData {
   fecha?: string;
@@ -12,6 +12,7 @@ interface GeoData {
   observaciones?: string;
   id_muestra?: string;
   _transcripcion?: string;
+  fotos?: string[];
 }
 
 interface Point {
@@ -21,10 +22,16 @@ interface Point {
   data?: GeoData;
 }
 
+interface TrashEntry {
+  deletedAt: string;
+  points: Point[];
+}
+
 interface PointsManagerProps {
   points: Point[];
   onClose: () => void;
-  onUpdate: (points: Point[]) => void;
+  onUpdate: (points: Point[], deleted?: Point[]) => void;
+  onRestore: (restored: Point[]) => void;
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -40,13 +47,24 @@ const FIELD_LABELS: Record<string, string> = {
 
 const EDITABLE_FIELDS = ["fecha", "numero_de_punto", "caja", "nivel", "alteracion", "mineralogia", "observaciones", "id_muestra"];
 
-export default function PointsManager({ points, onClose, onUpdate }: PointsManagerProps) {
+export default function PointsManager({ points, onClose, onUpdate, onRestore }: PointsManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<GeoData | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashEntries, setTrashEntries] = useState<TrashEntry[]>([]);
 
   const savedPoints = points.filter((p) => p.data);
   const pendingPoints = points.filter((p) => !p.data);
+
+  // Load trash on mount
+  useEffect(() => {
+    try {
+      const trash = JSON.parse(localStorage.getItem("geologgia-trash") || "[]");
+      setTrashEntries(trash);
+    } catch { /* ignore */ }
+  }, []);
 
   const startEdit = (point: Point) => {
     setEditingId(point.id);
@@ -65,8 +83,9 @@ export default function PointsManager({ points, onClose, onUpdate }: PointsManag
   };
 
   const deletePoint = (id: string) => {
+    const pointToDelete = points.find((p) => p.id === id);
     const updated = points.filter((p) => p.id !== id);
-    onUpdate(updated);
+    onUpdate(updated, pointToDelete ? [pointToDelete] : []);
     setConfirmDeleteId(null);
     if (editingId === id) {
       setEditingId(null);
@@ -75,10 +94,41 @@ export default function PointsManager({ points, onClose, onUpdate }: PointsManag
   };
 
   const clearAll = () => {
-    if (confirm("¿Eliminar TODOS los puntos? Esta acción no se puede deshacer.")) {
-      onUpdate([]);
-      localStorage.removeItem("geologgia-points");
-    }
+    // Send ALL points to trash before clearing
+    onUpdate([], points);
+    setConfirmClearAll(false);
+    // Refresh trash view
+    setTimeout(() => {
+      try {
+        const trash = JSON.parse(localStorage.getItem("geologgia-trash") || "[]");
+        setTrashEntries(trash);
+      } catch { /* ignore */ }
+    }, 100);
+  };
+
+  const restoreFromTrash = (idx: number) => {
+    const entry = trashEntries[idx];
+    if (!entry) return;
+
+    // Restore points
+    onRestore(entry.points);
+
+    // Remove from trash
+    const updatedTrash = trashEntries.filter((_, i) => i !== idx);
+    setTrashEntries(updatedTrash);
+    localStorage.setItem("geologgia-trash", JSON.stringify(updatedTrash));
+  };
+
+  const clearTrash = () => {
+    setTrashEntries([]);
+    localStorage.removeItem("geologgia-trash");
+  };
+
+  const formatTrashDate = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    } catch { return iso; }
   };
 
   return (
@@ -90,10 +140,33 @@ export default function PointsManager({ points, onClose, onUpdate }: PointsManag
           <span className="text-xs text-gray-400">{savedPoints.length} guardados, {pendingPoints.length} pendientes</span>
         </div>
         <div className="flex gap-2 items-center">
-          {points.length > 0 && (
-            <button onClick={clearAll} className="text-xs px-3 py-1.5 rounded-lg bg-red-900/50 border border-red-700 text-red-400 hover:bg-red-900">
-              🗑️ Borrar todo
-            </button>
+          {/* Trash toggle */}
+          <button
+            onClick={() => setShowTrash(!showTrash)}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+              showTrash
+                ? "bg-amber-900/50 border-amber-600 text-amber-300"
+                : "bg-gray-800 border-gray-600 text-gray-400 hover:text-amber-300"
+            }`}
+          >
+            🗑️ Papelera {trashEntries.length > 0 && `(${trashEntries.reduce((acc, e) => acc + e.points.length, 0)})`}
+          </button>
+
+          {points.length > 0 && !showTrash && (
+            confirmClearAll ? (
+              <div className="flex gap-1">
+                <button onClick={clearAll} className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-medium">
+                  Sí, borrar todo
+                </button>
+                <button onClick={() => setConfirmClearAll(false)} className="text-xs px-3 py-1.5 rounded-lg bg-gray-700 text-gray-300">
+                  No
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmClearAll(true)} className="text-xs px-3 py-1.5 rounded-lg bg-red-900/50 border border-red-700 text-red-400 hover:bg-red-900">
+                🗑️ Borrar todo
+              </button>
+            )
           )}
           <button onClick={onClose} className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-600 flex items-center justify-center text-xl hover:bg-gray-700">
             &times;
@@ -101,131 +174,198 @@ export default function PointsManager({ points, onClose, onUpdate }: PointsManag
         </div>
       </div>
 
-      {/* Points list */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {points.length === 0 && (
-          <div className="text-center text-gray-500 py-12">
-            <span className="text-4xl block mb-3">📍</span>
-            No hay puntos registrados aún.
-          </div>
-        )}
-
-        {points.map((point) => (
-          <div
-            key={point.id}
-            className={`rounded-xl border p-4 transition-all ${
-              point.data
-                ? "bg-gray-800/50 border-gray-600"
-                : "bg-yellow-900/20 border-yellow-700/40"
-            }`}
-          >
-            {/* Point header */}
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <span className={`font-mono font-bold text-sm ${point.data ? "text-green-400" : "text-yellow-400"}`}>
-                  {point.id}
-                </span>
-                <span className="text-xs text-gray-500 ml-2">
-                  {point.lat.toFixed(5)}, {point.lng.toFixed(5)}
-                </span>
-              </div>
-              <div className="flex gap-1.5">
-                {point.data && (
-                  <button
-                    onClick={() => editingId === point.id ? setEditingId(null) : startEdit(point)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                      editingId === point.id
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                    }`}
-                  >
-                    ✏️ {editingId === point.id ? "Cancelar" : "Editar"}
-                  </button>
-                )}
-                {confirmDeleteId === point.id ? (
-                  <div className="flex gap-1">
-                    <button onClick={() => deletePoint(point.id)} className="px-2.5 py-1 rounded-lg bg-red-600 text-white text-xs font-medium">
-                      Sí, borrar
-                    </button>
-                    <button onClick={() => setConfirmDeleteId(null)} className="px-2.5 py-1 rounded-lg bg-gray-700 text-gray-300 text-xs">
-                      No
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmDeleteId(point.id)}
-                    className="px-2.5 py-1 rounded-lg bg-gray-700 text-red-400 hover:bg-red-900/50 text-xs"
-                  >
-                    🗑️
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Point data (view mode) */}
-            {point.data && editingId !== point.id && (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
-                {EDITABLE_FIELDS.map((key) => {
-                  const val = (point.data as any)?.[key];
-                  if (!val || val === "No especificado") return null;
-                  return (
-                    <div key={key} className="text-xs">
-                      <span className="text-gray-500">{FIELD_LABELS[key]}:</span>{" "}
-                      <span className="text-gray-200">{val}</span>
-                    </div>
-                  );
-                })}
-              </div>
+      {/* ── Trash view ── */}
+      {showTrash && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-semibold text-amber-300">🗑️ Papelera — Puntos eliminados</h3>
+            {trashEntries.length > 0 && (
+              <button onClick={clearTrash} className="text-xs px-2 py-1 rounded-lg bg-gray-800 border border-gray-600 text-gray-400 hover:text-red-400">
+                Vaciar papelera
+              </button>
             )}
+          </div>
 
-            {/* Point data (edit mode) */}
-            {editingId === point.id && editData && (
-              <div className="flex flex-col gap-2 mt-3">
-                {EDITABLE_FIELDS.map((key) => (
-                  <div key={key} className="flex flex-col gap-0.5">
-                    <label className="text-xs text-gray-500 uppercase tracking-wide">{FIELD_LABELS[key]}</label>
-                    {key === "observaciones" ? (
-                      <textarea
-                        value={(editData as any)[key] || ""}
-                        onChange={(e) => setEditData({ ...editData, [key]: e.target.value })}
-                        rows={2}
-                        className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none resize-none"
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={(editData as any)[key] || ""}
-                        onChange={(e) => setEditData({ ...editData, [key]: e.target.value })}
-                        className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-                      />
-                    )}
-                  </div>
-                ))}
+          {trashEntries.length === 0 && (
+            <div className="text-center text-gray-500 py-12">
+              <span className="text-4xl block mb-3">♻️</span>
+              La papelera está vacía.
+            </div>
+          )}
 
-                {/* Show transcription if available */}
-                {editData._transcripcion && (
-                  <div className="mt-1 p-2 rounded-lg bg-gray-900/60 border border-gray-700">
-                    <span className="text-xs text-gray-500 uppercase tracking-wide">Transcripción IA:</span>
-                    <p className="text-xs text-gray-400 mt-1 whitespace-pre-wrap">{editData._transcripcion}</p>
-                  </div>
-                )}
-
+          {trashEntries.map((entry, idx) => (
+            <div key={idx} className="rounded-xl bg-amber-900/20 border border-amber-700/40 p-4">
+              <div className="flex justify-between items-center mb-2">
+                <div>
+                  <span className="text-sm font-medium text-amber-200">
+                    {entry.points.length} punto{entry.points.length > 1 ? "s" : ""}
+                  </span>
+                  <span className="text-xs text-gray-400 ml-2">
+                    Eliminado: {formatTrashDate(entry.deletedAt)}
+                  </span>
+                </div>
                 <button
-                  onClick={saveEdit}
-                  className="mt-1 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-sm font-medium"
+                  onClick={() => restoreFromTrash(idx)}
+                  className="px-3 py-1.5 rounded-lg bg-green-800/60 border border-green-600 text-green-300 text-xs font-medium hover:bg-green-700 transition-all"
                 >
-                  ✓ Guardar cambios
+                  ♻️ Restaurar
                 </button>
               </div>
-            )}
+              <div className="flex flex-wrap gap-1.5">
+                {entry.points.map((p) => (
+                  <span key={p.id} className="px-2 py-0.5 rounded-md bg-gray-800 border border-gray-600 text-xs text-gray-300 font-mono">
+                    {p.id}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-            {/* Pending point */}
-            {!point.data && (
-              <span className="text-xs text-yellow-500">⏳ Sin datos — toca el punto en el mapa para grabar</span>
-            )}
-          </div>
-        ))}
-      </div>
+      {/* ── Points list ── */}
+      {!showTrash && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {points.length === 0 && (
+            <div className="text-center text-gray-500 py-12">
+              <span className="text-4xl block mb-3">📍</span>
+              No hay puntos registrados aún.
+              {trashEntries.length > 0 && (
+                <button
+                  onClick={() => setShowTrash(true)}
+                  className="block mx-auto mt-4 px-4 py-2 rounded-lg bg-amber-900/50 border border-amber-700 text-amber-300 text-sm hover:bg-amber-900"
+                >
+                  🗑️ Ver papelera ({trashEntries.reduce((acc, e) => acc + e.points.length, 0)} puntos)
+                </button>
+              )}
+            </div>
+          )}
+
+          {points.map((point) => (
+            <div
+              key={point.id}
+              className={`rounded-xl border p-4 transition-all ${
+                point.data
+                  ? "bg-gray-800/50 border-gray-600"
+                  : "bg-yellow-900/20 border-yellow-700/40"
+              }`}
+            >
+              {/* Point header */}
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <span className={`font-mono font-bold text-sm ${point.data ? "text-green-400" : "text-yellow-400"}`}>
+                    {point.id}
+                  </span>
+                  <span className="text-xs text-gray-500 ml-2">
+                    {point.lat.toFixed(5)}, {point.lng.toFixed(5)}
+                  </span>
+                </div>
+                <div className="flex gap-1.5">
+                  {point.data && (
+                    <button
+                      onClick={() => editingId === point.id ? setEditingId(null) : startEdit(point)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                        editingId === point.id
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      }`}
+                    >
+                      ✏️ {editingId === point.id ? "Cancelar" : "Editar"}
+                    </button>
+                  )}
+                  {confirmDeleteId === point.id ? (
+                    <div className="flex gap-1">
+                      <button onClick={() => deletePoint(point.id)} className="px-2.5 py-1 rounded-lg bg-red-600 text-white text-xs font-medium">
+                        Sí, borrar
+                      </button>
+                      <button onClick={() => setConfirmDeleteId(null)} className="px-2.5 py-1 rounded-lg bg-gray-700 text-gray-300 text-xs">
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteId(point.id)}
+                      className="px-2.5 py-1 rounded-lg bg-gray-700 text-red-400 hover:bg-red-900/50 text-xs"
+                    >
+                      🗑️
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Point data (view mode) */}
+              {point.data && editingId !== point.id && (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
+                  {EDITABLE_FIELDS.map((key) => {
+                    const val = (point.data as any)?.[key];
+                    if (!val || val === "No especificado") return null;
+                    return (
+                      <div key={key} className="text-xs">
+                        <span className="text-gray-500">{FIELD_LABELS[key]}:</span>{" "}
+                        <span className="text-gray-200">{val}</span>
+                      </div>
+                    );
+                  })}
+                  {/* Photo thumbnails */}
+                  {point.data.fotos && point.data.fotos.length > 0 && (
+                    <div className="col-span-2 flex gap-1.5 mt-1">
+                      {point.data.fotos.map((foto, i) => (
+                        <img key={i} src={foto} alt={`Foto ${i + 1}`} className="w-10 h-10 rounded-md object-cover border border-gray-600" />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Point data (edit mode) */}
+              {editingId === point.id && editData && (
+                <div className="flex flex-col gap-2 mt-3">
+                  {EDITABLE_FIELDS.map((key) => (
+                    <div key={key} className="flex flex-col gap-0.5">
+                      <label className="text-xs text-gray-500 uppercase tracking-wide">{FIELD_LABELS[key]}</label>
+                      {key === "observaciones" ? (
+                        <textarea
+                          value={(editData as any)[key] || ""}
+                          onChange={(e) => setEditData({ ...editData, [key]: e.target.value })}
+                          rows={2}
+                          className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none resize-none"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={(editData as any)[key] || ""}
+                          onChange={(e) => setEditData({ ...editData, [key]: e.target.value })}
+                          className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+                        />
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Show transcription if available */}
+                  {editData._transcripcion && (
+                    <div className="mt-1 p-2 rounded-lg bg-gray-900/60 border border-gray-700">
+                      <span className="text-xs text-gray-500 uppercase tracking-wide">Transcripción IA:</span>
+                      <p className="text-xs text-gray-400 mt-1 whitespace-pre-wrap">{editData._transcripcion}</p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={saveEdit}
+                    className="mt-1 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-sm font-medium"
+                  >
+                    ✓ Guardar cambios
+                  </button>
+                </div>
+              )}
+
+              {/* Pending point */}
+              {!point.data && (
+                <span className="text-xs text-yellow-500">⏳ Sin datos — toca el punto en el mapa para grabar</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

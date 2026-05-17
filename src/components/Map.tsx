@@ -80,6 +80,43 @@ export default function Map() {
     localStorage.setItem("geologgia-points", JSON.stringify(points));
   }, [points, mounted]);
 
+  // ── Sync Leaflet markers with points state ──
+  const syncMarkersToPoints = useCallback((updatedPoints: Point[]) => {
+    if (!mapRef.current || typeof L === "undefined") return;
+
+    // Remove ALL existing markers from the map
+    markersRef.current.forEach((m) => {
+      if (mapRef.current) mapRef.current.removeLayer(m);
+    });
+    markersRef.current = [];
+
+    // Re-draw markers from the updated points
+    updatedPoints.forEach((p, i) => {
+      const hasSaved = !!p.data;
+      const icon = L.divIcon({
+        html: `<div style="width:28px;height:28px;background:${hasSaved ? '#22c55e' : '#ef4444'};border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:bold;">${i + 1}</div>`,
+        iconSize: [28, 28], iconAnchor: [14, 14], className: "",
+      });
+      const m = L.marker([p.lat, p.lng], { icon }).addTo(mapRef.current);
+      m.bindPopup(`<b>${p.id}</b><br>${hasSaved ? (p.data?.alteracion || '') + '<br>' + (p.data?.mineralogia || '') : 'Sin datos'}`);
+      markersRef.current.push(m);
+    });
+  }, []);
+
+  // ── Trash system for recovery ──
+  const moveToTrash = (deletedPoints: Point[]) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem("geologgia-trash") || "[]");
+      const trashEntry = {
+        deletedAt: new Date().toISOString(),
+        points: deletedPoints,
+      };
+      // Keep last 10 trash entries
+      const updated = [trashEntry, ...existing].slice(0, 10);
+      localStorage.setItem("geologgia-trash", JSON.stringify(updated));
+    } catch { /* ignore */ }
+  };
+
   // Save config to localStorage
   const saveConfig = () => {
     localStorage.setItem("geologgia-config", JSON.stringify({
@@ -646,9 +683,21 @@ export default function Map() {
         <PointsManager
           points={points}
           onClose={() => setShowPointsManager(false)}
-          onUpdate={(updated) => {
+          onUpdate={(updated, deleted) => {
+            // Save deleted points to trash for recovery
+            if (deleted && deleted.length > 0) {
+              moveToTrash(deleted);
+            }
             setPoints(updated);
             localStorage.setItem("geologgia-points", JSON.stringify(updated));
+            // Sync Leaflet markers
+            syncMarkersToPoints(updated);
+          }}
+          onRestore={(restored) => {
+            const merged = [...points, ...restored];
+            setPoints(merged);
+            localStorage.setItem("geologgia-points", JSON.stringify(merged));
+            syncMarkersToPoints(merged);
           }}
         />
       )}
