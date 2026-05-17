@@ -40,7 +40,6 @@ export default function Map() {
   interface TrackPoint { lat: number; lng: number; alt: number | null; time: string; }
   const [isTracking, setIsTracking] = useState(false);
   const [trackPoints, setTrackPoints] = useState<TrackPoint[]>([]);
-  const [trackStartTime, setTrackStartTime] = useState<Date | null>(null);
   const [trackElapsed, setTrackElapsed] = useState(0);
   const [showTrackExport, setShowTrackExport] = useState(false);
   const watchIdRef = useRef<number | null>(null);
@@ -72,7 +71,11 @@ export default function Map() {
 
   // Save points to localStorage whenever they change
   useEffect(() => {
-    if (!mounted || points.length === 0) return;
+    if (!mounted) return;
+    if (points.length === 0) {
+      localStorage.removeItem("geologgia-points");
+      return;
+    }
     localStorage.setItem("geologgia-points", JSON.stringify(points));
   }, [points, mounted]);
 
@@ -232,7 +235,14 @@ export default function Map() {
     };
 
     initMap();
-    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
+    return () => {
+      // Cleanup GPS tracking
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      if (trackTimerRef.current) clearInterval(trackTimerRef.current);
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+    };
   }, [mounted]);
 
   useEffect(() => {
@@ -270,7 +280,7 @@ export default function Map() {
       // Persist config (next number has already incremented)
       saveConfig();
     },
-    [activePoint]
+    [activePoint, pointPrefix]
   );
 
   // Export to CSV
@@ -287,7 +297,6 @@ export default function Map() {
   const startTracking = () => {
     if (!("geolocation" in navigator)) { alert("GPS no disponible"); return; }
     setTrackPoints([]);
-    setTrackStartTime(new Date());
     setTrackElapsed(0);
     setIsTracking(true);
     setShowTrackExport(false);

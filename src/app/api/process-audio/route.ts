@@ -62,15 +62,21 @@ REGLAS:
       },
     });
 
-    // Handle different SDK versions: .text can be property or function
-    let text: string;
-    if (typeof response.text === "function") {
-      text = response.text();
-    } else if (typeof response.text === "string") {
-      text = response.text;
-    } else if (response.candidates?.[0]?.content?.parts?.[0]?.text) {
-      text = response.candidates[0].content.parts[0].text;
-    } else {
+    // Extract text from Gemini response (SDK v2.3.0 uses getter)
+    let text = "";
+    try {
+      // Try as getter/property first (SDK v2.x)
+      const t = (response as any).text;
+      if (typeof t === "string") {
+        text = t;
+      } else if (typeof t === "function") {
+        text = t();
+      } else {
+        // Fallback: dig into candidates
+        text = (response as any).candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(response);
+      }
+    } catch (e: any) {
+      console.error("Error extracting text:", e);
       text = JSON.stringify(response);
     }
 
