@@ -35,33 +35,47 @@ const BASE_MINERALOGIA = [
   "Sericita", "Arcilla", "Limonita", "Goethita", "Turmalina",
 ];
 
+const BASE_LITOLOGIA = [
+  "No especificado",
+  // Ígneas intrusivas
+  "Granito", "Diorita", "Gabro", "Tonalita", "Granodiorita", "Sienita", "Pórfido",
+  // Ígneas extrusivas / volcánicas
+  "Andesita", "Basalto", "Riolita", "Dacita", "Toba", "Ignimbrita", "Brecha volcánica",
+  // Sedimentarias
+  "Arenisca", "Caliza", "Lutita", "Conglomerado", "Marga", "Limolita",
+  // Metamórficas
+  "Esquisto", "Gneis", "Mármol", "Cuarcita", "Pizarra", "Filita", "Hornfels",
+  // Otra
+  "Otra",
+];
+
 // Load custom fields from localStorage
-const loadCustomFields = (): { alteracion: string[]; mineralogia: string[] } => {
+const loadCustomFields = (): { alteracion: string[]; mineralogia: string[]; litologia: string[] } => {
   try {
     const saved = localStorage.getItem("geologgia-custom-fields");
     if (saved) return JSON.parse(saved);
   } catch { /* ignore */ }
-  return { alteracion: [], mineralogia: [] };
+  return { alteracion: [], mineralogia: [], litologia: [] };
 };
 
-const saveCustomFields = (fields: { alteracion: string[]; mineralogia: string[] }) => {
+const saveCustomFields = (fields: { alteracion: string[]; mineralogia: string[]; litologia: string[] }) => {
   localStorage.setItem("geologgia-custom-fields", JSON.stringify(fields));
 };
 
 // Fields the user needs to describe in their audio
 const PROMPT_FIELDS = [
-  { key: "caja", icon: "📦", label: "Caja", hint: "¿De qué caja es la muestra?" },
+  { key: "litologia", icon: "🪨", label: "Litología", hint: "¿Qué tipo de roca? (granito, andesita, caliza...)" },
   { key: "nivel", icon: "📏", label: "Nivel / Profundidad", hint: "¿A qué profundidad o nivel?" },
   { key: "alteracion", icon: "🔥", label: "Alteración", hint: "Tipo de alteración hidrotermal" },
   { key: "mineralogia", icon: "💎", label: "Mineralogía", hint: "Minerales observados" },
-  { key: "observaciones", icon: "📝", label: "Observaciones", hint: "Litología, estructuras, rumbo/manteo..." },
+  { key: "observaciones", icon: "📝", label: "Observaciones", hint: "Estructuras, rumbo/manteo, textura, color..." },
   { key: "id_muestra", icon: "🏷️", label: "ID Muestra", hint: "Código de la muestra" },
 ];
 
 const FIELD_LABELS: Record<string, string> = {
   fecha: "Fecha",
   numero_de_punto: "N° Punto",
-  caja: "Caja",
+  litologia: "Litología",
   nivel: "Nivel",
   alteracion: "Alteración",
   mineralogia: "Mineralogía",
@@ -83,6 +97,7 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
   const [customFields, setCustomFields] = useState(loadCustomFields());
   const [addingCustomAlteracion, setAddingCustomAlteracion] = useState(false);
   const [addingCustomMineral, setAddingCustomMineral] = useState(false);
+  const [addingCustomLitologia, setAddingCustomLitologia] = useState(false);
   const [customInput, setCustomInput] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
@@ -93,6 +108,7 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
   // Merged options (base + custom)
   const ALTERACION_OPTIONS = [...BASE_ALTERACION, ...customFields.alteracion];
   const MINERALOGIA_COMMON = [...BASE_MINERALOGIA, ...customFields.mineralogia];
+  const LITOLOGIA_OPTIONS = [...BASE_LITOLOGIA, ...(customFields.litologia || [])];
 
   // Auto-generated values
   const now = new Date();
@@ -463,12 +479,43 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
             </div>
           </div>
 
-          {/* Caja & Nivel */}
+          {/* Litología & Nivel */}
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-0.5">
-              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Caja</label>
-              <input type="text" value={geoData.caja} onChange={(e) => handleFieldChange("caja", e.target.value)}
-                className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none" />
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">🪨 Litología</label>
+              <div className="flex gap-1">
+                <select
+                  value={LITOLOGIA_OPTIONS.includes(geoData.litologia || geoData.caja) ? (geoData.litologia || geoData.caja) : "Otra"}
+                  onChange={(e) => handleFieldChange("litologia", e.target.value)}
+                  className="flex-1 bg-gray-800/80 border border-gray-600 rounded-lg px-2 py-1.5 text-xs text-white focus:border-blue-500 focus:outline-none appearance-none"
+                >
+                  {LITOLOGIA_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => { setAddingCustomLitologia(true); setCustomInput(""); }}
+                  className="px-1.5 py-1 rounded-lg bg-gray-700 text-blue-300 text-xs hover:bg-gray-600 border border-gray-600 flex-shrink-0"
+                >+</button>
+              </div>
+              {addingCustomLitologia && (
+                <div className="flex gap-1 mt-1">
+                  <input type="text" value={customInput} onChange={(e) => setCustomInput(e.target.value)}
+                    placeholder="Nuevo tipo de roca..."
+                    autoFocus
+                    className="flex-1 bg-gray-900 border border-blue-600 rounded-lg px-2 py-1 text-xs text-white focus:outline-none" />
+                  <button onClick={() => {
+                    if (customInput.trim() && !LITOLOGIA_OPTIONS.includes(customInput.trim())) {
+                      const updated = { ...customFields, litologia: [...(customFields.litologia || []), customInput.trim()] };
+                      setCustomFields(updated);
+                      saveCustomFields(updated);
+                      handleFieldChange("litologia", customInput.trim());
+                    }
+                    setAddingCustomLitologia(false);
+                  }} className="px-2 py-1 rounded-lg bg-blue-600 text-white text-xs">✓</button>
+                  <button onClick={() => setAddingCustomLitologia(false)} className="px-2 py-1 rounded-lg bg-gray-700 text-gray-300 text-xs">✕</button>
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-0.5">
               <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Nivel</label>

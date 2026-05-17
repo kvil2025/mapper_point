@@ -29,11 +29,11 @@ Debes responder ÚNICAMENTE con un objeto JSON con estas claves exactas (sin mar
 {
   "fecha": "${today}",
   "numero_de_punto": "${pointId}",
-  "caja": "Número de caja si se menciona, o 'No especificado'",
+  "litologia": "Tipo de roca mencionada (ej: granito, andesita, caliza, esquisto, toba, arenisca, basalto, diorita). Si no se menciona, 'No especificado'",
   "nivel": "Nivel o profundidad si se menciona (ej: '0-5m', 'superficie'), o 'No especificado'",
   "alteracion": "Tipo de alteración hidrotermal o meteorización mencionada (ej: argílica, propilítica, sericítica, silicificación, oxidación). Si no se menciona, 'No especificado'",
   "mineralogia": "Minerales observados o mencionados (ej: cuarzo, calcopirita, pirita, malaquita, feldespato). Si no se menciona, 'No especificado'",
-  "observaciones": "Cualquier otra observación mencionada: litología, estructuras, rumbo/manteo, color, textura, contexto geológico",
+  "observaciones": "Cualquier otra observación mencionada: estructuras, rumbo/manteo, color, textura, contexto geológico",
   "id_muestra": "Código o ID de muestra si se menciona, o 'No especificado'"
 }
 
@@ -44,6 +44,7 @@ REGLAS:
 - El número de punto ya está definido: ${pointId}.
 - Para mineralogía, lista todos los minerales separados por coma.
 - Para alteración, si se mencionan múltiples tipos, sepáralos por coma.
+- Para litología, identifica el tipo de roca principal mencionada.
 `;
 
     const response = await ai.models.generateContent({

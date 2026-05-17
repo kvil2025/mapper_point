@@ -378,8 +378,8 @@ export default function Map() {
   const exportCSV = () => {
     const savedPoints = points.filter((p) => p.data);
     if (savedPoints.length === 0) { alert("No hay puntos guardados para exportar."); return; }
-    const headers = ["ID","Lat","Lng","Fecha","N° Punto","Caja","Nivel","Alteración","Mineralogía","Observaciones","ID Muestra"];
-    const rows = savedPoints.map((p) => [p.id, p.lat.toFixed(6), p.lng.toFixed(6), p.data?.fecha||"", p.data?.numero_de_punto||p.id, p.data?.caja||"", p.data?.nivel||"", p.data?.alteracion||"", p.data?.mineralogia||"", p.data?.observaciones||"", p.data?.id_muestra||""]);
+    const headers = ["ID","Lat","Lng","Fecha","N° Punto","Litología","Nivel","Alteración","Mineralogía","Observaciones","ID Muestra"];
+    const rows = savedPoints.map((p) => [p.id, p.lat.toFixed(6), p.lng.toFixed(6), p.data?.fecha||"", p.data?.numero_de_punto||p.id, p.data?.litologia||p.data?.caja||"", p.data?.nivel||"", p.data?.alteracion||"", p.data?.mineralogia||"", p.data?.observaciones||"", p.data?.id_muestra||""]);
     const csv = [headers,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
     downloadFile(`geologgia_${pointPrefix}_${new Date().toISOString().slice(0,10)}.csv`, "\uFEFF"+csv, "text/csv;charset=utf-8;");
   };
