@@ -928,12 +928,16 @@ export default function Map() {
 
       {/* ── Floating panel for audio recording (mobile-safe) ── */}
       {activePoint && (
-        <div className="absolute bottom-0 left-0 right-0 md:left-auto md:w-96 md:right-4 md:bottom-4 z-[1000] bg-gray-900/95 backdrop-blur-xl border-t md:border border-gray-600 p-4 md:p-5 md:rounded-2xl shadow-2xl text-white" style={{ paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 20px))' }}>
-          <PointRecorder
-            point={activePoint}
-            onClose={() => setActivePoint(null)}
-            onSave={handleSave}
-          />
+        <div
+          className="fixed inset-0 md:inset-auto md:absolute md:bottom-4 md:right-4 md:w-96 md:max-h-[80vh] z-[2500] bg-gray-900/98 backdrop-blur-xl md:border md:border-gray-600 md:rounded-2xl shadow-2xl text-white flex flex-col"
+        >
+          <div className="flex-1 overflow-y-auto p-4 md:p-5" style={{ paddingTop: 'max(16px, env(safe-area-inset-top, 16px))', paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))' }}>
+            <PointRecorder
+              point={activePoint}
+              onClose={() => setActivePoint(null)}
+              onSave={handleSave}
+            />
+          </div>
         </div>
       )}
       {/* ── Points Manager overlay ── */}
