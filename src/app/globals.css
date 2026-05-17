@@ -3,35 +3,120 @@
 :root {
   --background: #0f172a;
   --foreground: #e2e8f0;
+  /* iOS safe areas */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+html, body {
+  height: 100%;
+  height: 100dvh; /* Dynamic viewport height — fixes Safari address bar */
+  overscroll-behavior: none; /* Prevent pull-to-refresh */
+  -webkit-overflow-scrolling: touch;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   padding: 0;
   overflow: hidden;
+  /* Prevent text selection on long press in field */
+  -webkit-user-select: none;
+  user-select: none;
+  /* Prevent callout menu on images */
+  -webkit-touch-callout: none;
+}
+
+/* Allow text selection in inputs */
+input, textarea, select {
+  -webkit-user-select: auto;
+  user-select: auto;
 }
 
 .leaflet-container {
   width: 100% !important;
   height: 100vh !important;
+  height: 100dvh !important;
   z-index: 1;
 }
 
-/* Carousel prompt animation */
+/* ── iOS Safe Area helpers ── */
+.safe-top { padding-top: max(16px, var(--sat)); }
+.safe-bottom { padding-bottom: max(16px, var(--sab)); }
+.safe-left { padding-left: max(16px, var(--sal)); }
+.safe-right { padding-right: max(16px, var(--sar)); }
+
+/* Bottom action bar needs extra bottom padding for home indicator */
+.bottom-safe {
+  padding-bottom: calc(16px + var(--sab));
+}
+
+/* ── Touch-friendly overrides ── */
+button, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation; /* Prevent 300ms delay */
+}
+
+/* Small chips/pills can be smaller */
+.chip-btn {
+  min-height: 32px !important;
+  min-width: auto !important;
+}
+
+/* Prevent iOS zoom on input focus */
+input[type="text"],
+input[type="number"],
+select,
+textarea {
+  font-size: 16px !important; /* iOS won't zoom if >= 16px */
+}
+
+/* ── Animations ── */
 .animate-fade-in {
   animation: fadeSlideIn 0.4s ease-out;
 }
 
 @keyframes fadeSlideIn {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* PWA splash loading */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #0f172a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  transition: opacity 0.5s;
+}
+
+/* Scrollbar for overlay panels */
+.overlay-scroll::-webkit-scrollbar { width: 4px; }
+.overlay-scroll::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+.overlay-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Range slider iOS fix */
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 3px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid white;
+  cursor: pointer;
 }

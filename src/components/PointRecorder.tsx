@@ -602,7 +602,7 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
                   <button
                     key={mineral}
                     onClick={() => toggleMineral(mineral)}
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium transition-all ${
+                    className={`chip-btn px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
                       isSelected
                         ? "bg-emerald-600 text-white border border-emerald-400"
                         : "bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-400"

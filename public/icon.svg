@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#0f172a"/>
+  <g transform="translate(256,256) rotate(-30)">
+    <!-- Hammer -->
+    <rect x="-12" y="-160" width="24" height="220" rx="8" fill="#10b981"/>
+    <path d="M-50,-160 L50,-160 L60,-130 L-60,-130 Z" fill="#f59e0b"/>
+    <path d="M50,-160 L80,-145 L70,-130 L50,-130 Z" fill="#d97706"/>
+  </g>
+  <!-- GPS Pin -->
+  <g transform="translate(300,200)">
+    <path d="M0,-60 C-30,-60 -50,-35 -50,-10 C-50,25 0,70 0,70 C0,70 50,25 50,-10 C50,-35 30,-60 0,-60Z" fill="#10b981" opacity="0.9"/>
+    <circle cx="0" cy="-10" r="18" fill="#0f172a"/>
+    <circle cx="0" cy="-10" r="8" fill="#f59e0b"/>
+  </g>
+</svg>

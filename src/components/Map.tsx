@@ -710,7 +710,7 @@ export default function Map() {
 
       {/* ── Top bar: GPS Accuracy + Config + Counter + Export ── */}
       {mapReady && !activePoint && (
-        <div className="absolute top-4 left-4 right-4 z-[1000] flex justify-between items-center">
+        <div className="absolute top-0 left-0 right-0 z-[1000] safe-top pt-2 px-4 flex justify-between items-center">
           {/* GPS accuracy badge */}
           <div className="flex items-center gap-2">
             {gpsAccuracy !== null && (
