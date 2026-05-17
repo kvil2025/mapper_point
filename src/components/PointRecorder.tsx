@@ -22,18 +22,31 @@ interface GeoData {
 }
 
 // ── Geological dropdowns (industry standard) ──
-const ALTERACION_OPTIONS = [
+const BASE_ALTERACION = [
   "No especificado", "Argílica", "Argílica avanzada", "Propilítica",
   "Sericítica", "Fílica", "Potásica", "Silicificación",
   "Cloritización", "Epidotización", "Oxidación", "Supérgena", "Otra",
 ];
 
-const MINERALOGIA_COMMON = [
+const BASE_MINERALOGIA = [
   "Cuarzo", "Feldespato", "Plagioclasa", "Biotita", "Muscovita",
   "Pirita", "Calcopirita", "Molibdenita", "Magnetita", "Hematita",
   "Malaquita", "Crisocola", "Calcita", "Clorita", "Epidota",
   "Sericita", "Arcilla", "Limonita", "Goethita", "Turmalina",
 ];
+
+// Load custom fields from localStorage
+const loadCustomFields = (): { alteracion: string[]; mineralogia: string[] } => {
+  try {
+    const saved = localStorage.getItem("geologgia-custom-fields");
+    if (saved) return JSON.parse(saved);
+  } catch { /* ignore */ }
+  return { alteracion: [], mineralogia: [] };
+};
+
+const saveCustomFields = (fields: { alteracion: string[]; mineralogia: string[] }) => {
+  localStorage.setItem("geologgia-custom-fields", JSON.stringify(fields));
+};
 
 // Fields the user needs to describe in their audio
 const PROMPT_FIELDS = [
@@ -67,11 +80,19 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [photos, setPhotos] = useState<string[]>([]);
   const [selectedMinerals, setSelectedMinerals] = useState<string[]>([]);
+  const [customFields, setCustomFields] = useState(loadCustomFields());
+  const [addingCustomAlteracion, setAddingCustomAlteracion] = useState(false);
+  const [addingCustomMineral, setAddingCustomMineral] = useState(false);
+  const [customInput, setCustomInput] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const promptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Merged options (base + custom)
+  const ALTERACION_OPTIONS = [...BASE_ALTERACION, ...customFields.alteracion];
+  const MINERALOGIA_COMMON = [...BASE_MINERALOGIA, ...customFields.mineralogia];
 
   // Auto-generated values
   const now = new Date();
@@ -456,18 +477,43 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
             </div>
           </div>
 
-          {/* Alteración - DROPDOWN */}
+          {/* Alteración - DROPDOWN + custom add */}
           <div className="flex flex-col gap-0.5">
             <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">🔥 Alteración</label>
-            <select
-              value={ALTERACION_OPTIONS.includes(geoData.alteracion) ? geoData.alteracion : "Otra"}
-              onChange={(e) => handleFieldChange("alteracion", e.target.value)}
-              className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none appearance-none"
-            >
-              {ALTERACION_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
+            <div className="flex gap-1">
+              <select
+                value={ALTERACION_OPTIONS.includes(geoData.alteracion) ? geoData.alteracion : "Otra"}
+                onChange={(e) => handleFieldChange("alteracion", e.target.value)}
+                className="flex-1 bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none appearance-none"
+              >
+                {ALTERACION_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => { setAddingCustomAlteracion(true); setCustomInput(""); }}
+                className="px-2 py-1 rounded-lg bg-gray-700 text-blue-300 text-xs hover:bg-gray-600 border border-gray-600 flex-shrink-0"
+                title="Agregar opción"
+              >+</button>
+            </div>
+            {addingCustomAlteracion && (
+              <div className="flex gap-1 mt-1">
+                <input type="text" value={customInput} onChange={(e) => setCustomInput(e.target.value)}
+                  placeholder="Nueva alteración..."
+                  autoFocus
+                  className="flex-1 bg-gray-900 border border-blue-600 rounded-lg px-2 py-1 text-xs text-white focus:outline-none" />
+                <button onClick={() => {
+                  if (customInput.trim() && !ALTERACION_OPTIONS.includes(customInput.trim())) {
+                    const updated = { ...customFields, alteracion: [...customFields.alteracion, customInput.trim()] };
+                    setCustomFields(updated);
+                    saveCustomFields(updated);
+                    handleFieldChange("alteracion", customInput.trim());
+                  }
+                  setAddingCustomAlteracion(false);
+                }} className="px-2 py-1 rounded-lg bg-blue-600 text-white text-xs">✓</button>
+                <button onClick={() => setAddingCustomAlteracion(false)} className="px-2 py-1 rounded-lg bg-gray-700 text-gray-300 text-xs">✕</button>
+              </div>
+            )}
             {!ALTERACION_OPTIONS.includes(geoData.alteracion) && geoData.alteracion !== "No especificado" && (
               <input type="text" value={geoData.alteracion} onChange={(e) => handleFieldChange("alteracion", e.target.value)}
                 placeholder="Especificar otra alteración..."
@@ -475,9 +521,33 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
             )}
           </div>
 
-          {/* Mineralogía - CHIP SELECT */}
+          {/* Mineralogía - CHIP SELECT + custom add */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">💎 Mineralogía</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">💎 Mineralogía</label>
+              <button
+                onClick={() => { setAddingCustomMineral(true); setCustomInput(""); }}
+                className="text-[10px] text-blue-400 hover:text-blue-300"
+              >+ Agregar mineral</button>
+            </div>
+            {addingCustomMineral && (
+              <div className="flex gap-1 mb-1">
+                <input type="text" value={customInput} onChange={(e) => setCustomInput(e.target.value)}
+                  placeholder="Nuevo mineral..."
+                  autoFocus
+                  className="flex-1 bg-gray-900 border border-blue-600 rounded-lg px-2 py-1 text-xs text-white focus:outline-none" />
+                <button onClick={() => {
+                  if (customInput.trim() && !MINERALOGIA_COMMON.includes(customInput.trim())) {
+                    const updated = { ...customFields, mineralogia: [...customFields.mineralogia, customInput.trim()] };
+                    setCustomFields(updated);
+                    saveCustomFields(updated);
+                    toggleMineral(customInput.trim());
+                  }
+                  setAddingCustomMineral(false);
+                }} className="px-2 py-1 rounded-lg bg-blue-600 text-white text-xs">✓</button>
+                <button onClick={() => setAddingCustomMineral(false)} className="px-2 py-1 rounded-lg bg-gray-700 text-gray-300 text-xs">✕</button>
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5 p-2 rounded-lg bg-gray-800/50 border border-gray-700 max-h-24 overflow-y-auto">
               {MINERALOGIA_COMMON.map((mineral) => {
                 const isSelected = selectedMinerals.some((m) => m.toLowerCase() === mineral.toLowerCase());
@@ -497,7 +567,7 @@ export default function PointRecorder({ point, onClose, onSave }: PointRecorderP
               })}
             </div>
             <input type="text" value={geoData.mineralogia} onChange={(e) => handleFieldChange("mineralogia", e.target.value)}
-              placeholder="Agregar minerales adicionales..."
+              placeholder="Editar minerales manualmente..."
               className="w-full bg-gray-800/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-gray-300 focus:border-blue-500 focus:outline-none" />
           </div>
 

@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import PointRecorder from "./PointRecorder";
 import PointsManager from "./PointsManager";
+import TracksManager, { TRACK_COLORS } from "./TracksManager";
+import type { SavedTrack } from "./TracksManager";
+import OverlayManager from "./OverlayManager";
+import type { GeoOverlay } from "./OverlayManager";
 
 // Declare Leaflet as global (loaded from CDN in layout.tsx)
 declare const L: any;
@@ -47,6 +51,17 @@ export default function Map() {
   const polylineRef = useRef<any>(null);
   const trackTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Saved tracks ──
+  const [savedTracks, setSavedTracks] = useState<SavedTrack[]>([]);
+  const [visibleTrackIds, setVisibleTrackIds] = useState<string[]>([]);
+  const [showTracksManager, setShowTracksManager] = useState(false);
+  const trackPolylinesRef = useRef<Record<string, any>>({});
+
+  // ── Overlays ──
+  const [overlays, setOverlays] = useState<GeoOverlay[]>([]);
+  const [showOverlayManager, setShowOverlayManager] = useState(false);
+  const overlayLayersRef = useRef<Record<string, any>>({});
+
   // Client-side mount guard + load saved data
   useEffect(() => {
     setMounted(true);
@@ -66,6 +81,18 @@ export default function Map() {
       if (savedPoints) {
         const pts = JSON.parse(savedPoints) as Point[];
         setPoints(pts);
+      }
+
+      // Load saved tracks
+      const savedTracksData = localStorage.getItem("geologgia-tracks");
+      if (savedTracksData) {
+        setSavedTracks(JSON.parse(savedTracksData));
+      }
+
+      // Load overlays
+      const savedOverlays = localStorage.getItem("geologgia-overlays");
+      if (savedOverlays) {
+        setOverlays(JSON.parse(savedOverlays));
       }
     } catch { /* ignore parse errors */ }
   }, []);
@@ -411,9 +438,193 @@ export default function Map() {
     if (trackTimerRef.current) { clearInterval(trackTimerRef.current); trackTimerRef.current = null; }
     setIsTracking(false);
     setShowTrackExport(true);
-    // Save track to localStorage
+
+    // Save track to savedTracks array
+    if (trackPoints.length > 1) {
+      const date = new Date().toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      const newTrack: SavedTrack = {
+        id: `trk-${Date.now()}`,
+        name: `Ruta ${date}`,
+        date,
+        distance: calcTrackDistanceFromPoints(trackPoints),
+        duration: trackElapsed,
+        pointCount: trackPoints.length,
+        points: trackPoints,
+        color: TRACK_COLORS[savedTracks.length % TRACK_COLORS.length],
+      };
+      const updated = [newTrack, ...savedTracks];
+      setSavedTracks(updated);
+      localStorage.setItem("geologgia-tracks", JSON.stringify(updated));
+    }
+    // Also save last track for backward compat
     localStorage.setItem("geologgia-track", JSON.stringify(trackPoints));
   };
+
+  // Calculate distance from a specific points array
+  const calcTrackDistanceFromPoints = (pts: TrackPoint[]) => {
+    let dist = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const R = 6371000;
+      const dLat = (pts[i].lat - pts[i-1].lat) * Math.PI / 180;
+      const dLon = (pts[i].lng - pts[i-1].lng) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(pts[i-1].lat*Math.PI/180) * Math.cos(pts[i].lat*Math.PI/180) * Math.sin(dLon/2)**2;
+      dist += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+    return dist < 1000 ? `${Math.round(dist)} m` : `${(dist/1000).toFixed(2)} km`;
+  };
+
+  // ── Saved tracks management ──
+  const toggleTrackVisibility = (id: string) => {
+    setVisibleTrackIds((prev) => {
+      const isVisible = prev.includes(id);
+      if (isVisible) {
+        // Remove polyline from map
+        if (trackPolylinesRef.current[id] && mapRef.current) {
+          mapRef.current.removeLayer(trackPolylinesRef.current[id]);
+          delete trackPolylinesRef.current[id];
+        }
+        return prev.filter((tid) => tid !== id);
+      } else {
+        // Draw polyline on map
+        const track = savedTracks.find((t) => t.id === id);
+        if (track && mapRef.current && typeof L !== "undefined") {
+          const coords = track.points.map((p) => [p.lat, p.lng]);
+          const pl = L.polyline(coords, { color: track.color, weight: 4, opacity: 0.85, dashArray: "8 4" }).addTo(mapRef.current);
+          pl.bindPopup(`<b>${track.name}</b><br>${track.distance} — ${track.pointCount} pts`);
+          trackPolylinesRef.current[id] = pl;
+          mapRef.current.fitBounds(pl.getBounds(), { padding: [50, 50] });
+        }
+        return [...prev, id];
+      }
+    });
+  };
+
+  const showAllTracks = () => {
+    savedTracks.forEach((track) => {
+      if (!visibleTrackIds.includes(track.id)) {
+        toggleTrackVisibility(track.id);
+      }
+    });
+  };
+
+  const hideAllTracks = () => {
+    visibleTrackIds.forEach((id) => {
+      if (trackPolylinesRef.current[id] && mapRef.current) {
+        mapRef.current.removeLayer(trackPolylinesRef.current[id]);
+        delete trackPolylinesRef.current[id];
+      }
+    });
+    setVisibleTrackIds([]);
+  };
+
+  const deleteTrack = (id: string) => {
+    // Remove from map
+    if (trackPolylinesRef.current[id] && mapRef.current) {
+      mapRef.current.removeLayer(trackPolylinesRef.current[id]);
+      delete trackPolylinesRef.current[id];
+    }
+    setVisibleTrackIds((prev) => prev.filter((tid) => tid !== id));
+    const updated = savedTracks.filter((t) => t.id !== id);
+    setSavedTracks(updated);
+    localStorage.setItem("geologgia-tracks", JSON.stringify(updated));
+  };
+
+  const renameTrack = (id: string, name: string) => {
+    const updated = savedTracks.map((t) => t.id === id ? { ...t, name } : t);
+    setSavedTracks(updated);
+    localStorage.setItem("geologgia-tracks", JSON.stringify(updated));
+  };
+
+  const exportSingleTrack = (track: SavedTrack, format: "gpx" | "kml" | "geojson") => {
+    const date = new Date().toISOString().slice(0, 10);
+    if (format === "gpx") {
+      const trkpts = track.points.map(p => `      <trkpt lat="${p.lat}" lon="${p.lng}"><ele>${p.alt||0}</ele><time>${p.time}</time></trkpt>`).join("\n");
+      downloadFile(`${track.name}.gpx`, `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="GeologgIA Mapper">\n  <trk>\n    <name>${track.name}</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>`, "application/gpx+xml");
+    } else if (format === "kml") {
+      const coords = track.points.map(p => `${p.lng},${p.lat},${p.alt||0}`).join(" ");
+      downloadFile(`${track.name}.kml`, `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>${track.name}</name>\n    <Placemark>\n      <name>Ruta</name>\n      <LineString><coordinates>${coords}</coordinates></LineString>\n    </Placemark>\n  </Document>\n</kml>`, "application/vnd.google-earth.kml+xml");
+    } else {
+      const geojson = JSON.stringify({ type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "LineString", coordinates: track.points.map(p => [p.lng, p.lat, p.alt||0]) }, properties: { name: track.name, date: track.date, distance: track.distance } }] }, null, 2);
+      downloadFile(`${track.name}.geojson`, geojson, "application/geo+json");
+    }
+  };
+
+  // ── Overlay management ──
+  const addOverlay = (overlay: GeoOverlay) => {
+    const updated = [...overlays, overlay];
+    setOverlays(updated);
+    localStorage.setItem("geologgia-overlays", JSON.stringify(updated));
+    renderOverlayOnMap(overlay);
+  };
+
+  const removeOverlay = (id: string) => {
+    if (overlayLayersRef.current[id] && mapRef.current) {
+      mapRef.current.removeLayer(overlayLayersRef.current[id]);
+      delete overlayLayersRef.current[id];
+    }
+    const updated = overlays.filter((o) => o.id !== id);
+    setOverlays(updated);
+    localStorage.setItem("geologgia-overlays", JSON.stringify(updated));
+  };
+
+  const toggleOverlay = (id: string) => {
+    const overlay = overlays.find((o) => o.id === id);
+    if (!overlay) return;
+    const newVisible = !overlay.visible;
+    if (newVisible) {
+      renderOverlayOnMap({ ...overlay, visible: true });
+    } else {
+      if (overlayLayersRef.current[id] && mapRef.current) {
+        mapRef.current.removeLayer(overlayLayersRef.current[id]);
+        delete overlayLayersRef.current[id];
+      }
+    }
+    const updated = overlays.map((o) => o.id === id ? { ...o, visible: newVisible } : o);
+    setOverlays(updated);
+    localStorage.setItem("geologgia-overlays", JSON.stringify(updated));
+  };
+
+  const changeOverlayOpacity = (id: string, opacity: number) => {
+    if (overlayLayersRef.current[id]) {
+      overlayLayersRef.current[id].setStyle?.({ opacity, fillOpacity: opacity * 0.5 });
+      if (overlayLayersRef.current[id].setOpacity) overlayLayersRef.current[id].setOpacity(opacity);
+    }
+    const updated = overlays.map((o) => o.id === id ? { ...o, opacity } : o);
+    setOverlays(updated);
+    localStorage.setItem("geologgia-overlays", JSON.stringify(updated));
+  };
+
+  const renderOverlayOnMap = (overlay: GeoOverlay) => {
+    if (!mapRef.current || typeof L === "undefined") return;
+    // Remove existing
+    if (overlayLayersRef.current[overlay.id]) {
+      mapRef.current.removeLayer(overlayLayersRef.current[overlay.id]);
+    }
+    if (overlay.type === "image" && overlay.imageData && overlay.bounds) {
+      const imgOverlay = L.imageOverlay(overlay.imageData, overlay.bounds, { opacity: overlay.opacity }).addTo(mapRef.current);
+      overlayLayersRef.current[overlay.id] = imgOverlay;
+      mapRef.current.fitBounds(overlay.bounds, { padding: [50, 50] });
+    } else if (overlay.type === "geojson" && overlay.geojsonData) {
+      const layer = L.geoJSON(overlay.geojsonData, {
+        style: { color: overlay.color || "#3b82f6", weight: 2, opacity: overlay.opacity, fillOpacity: (overlay.opacity || 0.8) * 0.3 },
+        onEachFeature: (feature: any, lyr: any) => {
+          if (feature.properties?.name) lyr.bindPopup(`<b>${feature.properties.name}</b>`);
+        },
+      }).addTo(mapRef.current);
+      overlayLayersRef.current[overlay.id] = layer;
+      mapRef.current.fitBounds(layer.getBounds(), { padding: [50, 50] });
+    }
+  };
+
+  // Render saved overlays when map is ready
+  useEffect(() => {
+    if (!mapReady) return;
+    overlays.forEach((o) => {
+      if (o.visible && !overlayLayersRef.current[o.id]) {
+        renderOverlayOnMap(o);
+      }
+    });
+  }, [mapReady]);
 
   const calcTrackDistance = () => {
     let dist = 0;
@@ -533,12 +744,34 @@ export default function Map() {
           </div>
 
           {/* Action buttons */}
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
+            {/* Tracks button */}
+            {savedTracks.length > 0 && (
+              <button
+                onClick={() => setShowTracksManager(true)}
+                className="h-9 px-2.5 rounded-xl bg-amber-900/80 backdrop-blur-md border border-amber-600 text-amber-300 flex items-center gap-1 hover:bg-amber-800 transition-all text-xs"
+              >
+                🚶 {savedTracks.length}
+              </button>
+            )}
+
+            {/* Layers button */}
+            <button
+              onClick={() => setShowOverlayManager(true)}
+              className={`h-9 px-2.5 rounded-xl backdrop-blur-md border flex items-center gap-1 hover:bg-gray-800 transition-all text-xs ${
+                overlays.length > 0
+                  ? "bg-blue-900/80 border-blue-600 text-blue-300"
+                  : "bg-gray-900/80 border-gray-600 text-gray-300"
+              }`}
+            >
+              🗺️ {overlays.length > 0 ? overlays.length : "Capas"}
+            </button>
+
             {/* Export CSV */}
             {points.filter(p => p.data).length > 0 && (
               <button
                 onClick={exportCSV}
-                className="h-10 px-3 rounded-xl bg-green-800/80 backdrop-blur-md border border-green-600 text-green-300 flex items-center gap-1.5 hover:bg-green-700 transition-all text-sm"
+                className="h-9 px-2.5 rounded-xl bg-green-800/80 backdrop-blur-md border border-green-600 text-green-300 flex items-center gap-1 hover:bg-green-700 transition-all text-xs"
               >
                 📥 CSV
               </button>
@@ -547,7 +780,7 @@ export default function Map() {
             {/* Config gear */}
             <button
               onClick={() => setShowConfig(!showConfig)}
-              className="w-10 h-10 rounded-xl bg-gray-900/80 backdrop-blur-md border border-gray-600 text-white flex items-center justify-center hover:bg-gray-800 transition-all"
+              className="w-9 h-9 rounded-xl bg-gray-900/80 backdrop-blur-md border border-gray-600 text-white flex items-center justify-center hover:bg-gray-800 transition-all text-sm"
             >
               ⚙️
             </button>
@@ -684,13 +917,11 @@ export default function Map() {
           points={points}
           onClose={() => setShowPointsManager(false)}
           onUpdate={(updated, deleted) => {
-            // Save deleted points to trash for recovery
             if (deleted && deleted.length > 0) {
               moveToTrash(deleted);
             }
             setPoints(updated);
             localStorage.setItem("geologgia-points", JSON.stringify(updated));
-            // Sync Leaflet markers
             syncMarkersToPoints(updated);
           }}
           onRestore={(restored) => {
@@ -699,6 +930,33 @@ export default function Map() {
             localStorage.setItem("geologgia-points", JSON.stringify(merged));
             syncMarkersToPoints(merged);
           }}
+        />
+      )}
+
+      {/* ── Tracks Manager overlay ── */}
+      {showTracksManager && (
+        <TracksManager
+          tracks={savedTracks}
+          visibleTrackIds={visibleTrackIds}
+          onClose={() => setShowTracksManager(false)}
+          onToggleTrack={toggleTrackVisibility}
+          onDeleteTrack={deleteTrack}
+          onRenameTrack={renameTrack}
+          onExportTrack={exportSingleTrack}
+          onShowAll={showAllTracks}
+          onHideAll={hideAllTracks}
+        />
+      )}
+
+      {/* ── Overlay Manager overlay ── */}
+      {showOverlayManager && (
+        <OverlayManager
+          overlays={overlays}
+          onClose={() => setShowOverlayManager(false)}
+          onAddOverlay={addOverlay}
+          onRemoveOverlay={removeOverlay}
+          onToggleOverlay={toggleOverlay}
+          onOpacityChange={changeOverlayOpacity}
         />
       )}
     </div>
