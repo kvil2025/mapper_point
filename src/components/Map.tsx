@@ -61,6 +61,7 @@ export default function Map() {
   const [overlays, setOverlays] = useState<GeoOverlay[]>([]);
   const [showOverlayManager, setShowOverlayManager] = useState(false);
   const overlayLayersRef = useRef<Record<string, any>>({});
+  const [pendingPoint, setPendingPoint] = useState<[number, number] | null>(null);
 
   // Client-side mount guard + load saved data
   useEffect(() => {
@@ -337,7 +338,7 @@ export default function Map() {
           (pos) => {
             const latlng: [number, number] = [pos.coords.latitude, pos.coords.longitude];
             setGpsPosition(latlng);
-            createGeoPoint(latlng[0], latlng[1]);
+            setPendingPoint(latlng);
           },
           () => alert("GPS no disponible. Activa la ubicación."),
           { timeout: 8000, enableHighAccuracy: true }
@@ -345,7 +346,18 @@ export default function Map() {
       }
       return;
     }
-    createGeoPoint(gpsPosition[0], gpsPosition[1]);
+    setPendingPoint([gpsPosition[0], gpsPosition[1]]);
+  };
+
+  const confirmPendingPoint = () => {
+    if (pendingPoint) {
+      createGeoPoint(pendingPoint[0], pendingPoint[1]);
+      setPendingPoint(null);
+    }
+  };
+
+  const cancelPendingPoint = () => {
+    setPendingPoint(null);
   };
 
   const handleSave = useCallback(
@@ -871,15 +883,23 @@ export default function Map() {
 
           {/* Main action row */}
           <div className="flex flex-row gap-2 items-center flex-wrap justify-center">
-            <button
-              onClick={handleRecordAtGPS}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm shadow-lg shadow-blue-600/30 transition-all active:scale-95"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
-              </svg>
-              📍 Punto
-            </button>
+            {!pendingPoint ? (
+              <button
+                onClick={handleRecordAtGPS}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+                </svg>
+                📍 Punto
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-gray-900/90 backdrop-blur-md border border-blue-500 shadow-lg">
+                <span className="text-sm text-white font-medium">¿Agregar punto aquí?</span>
+                <button onClick={confirmPendingPoint} className="px-3 py-1.5 rounded-full bg-green-600 hover:bg-green-700 text-white text-xs font-bold active:scale-95 transition-all">✓ Sí</button>
+                <button onClick={cancelPendingPoint} className="px-3 py-1.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold active:scale-95 transition-all">✕ No</button>
+              </div>
+            )}
 
             {!isTracking && !showTrackExport && (
               <button
